@@ -17,7 +17,7 @@ TWILIO_CONTENT_SID = st.secrets["TWILIO_CONTENT_SID"]
 
 @st.cache_resource
 def get_gemini_client():
- return genai.Client(api_key = GEMINI_API_KEY)
+    return genai.Client(api_key = GEMINI_API_KEY)
 
 
 @st.cache_resource
@@ -31,13 +31,26 @@ gemini_client = get_gemini_client()
 MODEL_NAME = "gemini-3.8-flash"
 
 def clean_whatsapp_text(text):
-    
+    if not text:
+        return "No deadline summary available."
+    text = " ".join(text.split()) # collapse whitespace/newlines
+    return text[:1500] + "..." if len(text) > 1500 else text
 
 def send_whatsapp(to_number, user_name, summary):
     try:
-        content_variable = json.dumps(
+        content_variables = json.dumps(
            {"1": user_name, "2": clean_whatsapp_text(summary)}, ensure_ascii=False
         )
+        message = twilio_client.messages.create(
+            from_=TWILIO_WHATSAPP_FROM,
+            to=f"whatsapp:{to_number}",
+            content_sid=TWILIO_CONTENT_SID,
+            content_variables=content_variables,
+        )
+        return True, message.sid
+    except Exception as error:
+        return False, str(error)
+
 
 
 def render_message(message):
@@ -103,10 +116,10 @@ with button_col:
         with st.spinner("Summarizing your day..."): 
             summary = ask_gemini([SUMMARY_REQUEST_PROMPT])
         success, info = send_whatsapp(st.session_state.whatsapp_number, st.session_state.name, summary)
-    if success:
-       st.success("Sent! Check your WhatsApp 📲")
-    else:
-        st.error(f"Couldn't send that: {info}")
+        if success:
+            st.success("Sent! Check your WhatsApp 📲")
+        else:
+            st.error(f"Couldn't send that: {info}")
 
 st.caption(f"Logged in as {st.session_state.name} - updates go to {st.session_state.whatsapp_number}")
 
